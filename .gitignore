@@ -219,3 +219,6 @@ rsconnect/
 
 # mac specific
 .DS_Store
+
+# files too big for github
+*.h5ad
