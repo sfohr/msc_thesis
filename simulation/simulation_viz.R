@@ -3,19 +3,7 @@ library(dplyr)
 library(latex2exp)
 library(cowplot)
 
-# folder_path <- "./simulation_nbs/lrz_square_matrices_sim/"
-# csv_path <- paste0(folder_path, "all_sims_lrz.csv")
-# 
-# d <- readr::read_csv(csv_path)[, -1] |>
-#   mutate(
-#     identifier = paste0(
-#       algorithm, m, r, sparsity_level, replication, initialization
-#     )
-#   )
-# 
-# saveRDS(d, "./simulation_nbs/lrz_square_matrices_sim/all_sims_lrz.RDS")
-
-d <- readRDS("./simulation_nbs/lrz_square_matrices_sim/all_sims_lrz.RDS")
+d <- readRDS("./all_sims_lrz.RDS")
 
 d <- d |> 
   filter(m != 5000) |> 
@@ -79,7 +67,7 @@ dimension_X_totaltime <- d_sum |>
 
 ggsave("dimension_X_totaltime.pdf", 
        plot=dimension_X_totaltime, device = "pdf", width = 7, height = 5, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 summary(lm(log(total_time) ~ m + r + actual_sparsity*algorithm, data=d_sum))
 summary(lm(log(mean_time_per_iter) ~ m + r + algorithm*actual_sparsity, data=d_sum))
@@ -95,7 +83,7 @@ dimension_X_niterations <- d_sum |>
 
 ggsave("dimension_X_niterations.pdf", 
        plot=dimension_X_niterations, device = "pdf", width = 7, height = 5, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 # total log10 time per iteration over dimension
 # timeperiter_X_dimension <- d_sum |> 
@@ -113,7 +101,7 @@ dimension_X_timeperiter <- d |>
 
 ggsave("dimension_X_timeperiter.pdf", 
        plot=dimension_X_timeperiter, device = "pdf", width = 7, height = 5, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 dimension_multiplot <- ggpubr::ggarrange(
   dimension_X_niterations, dimension_X_totaltime, dimension_X_timeperiter,
@@ -123,7 +111,7 @@ dimension_multiplot <- ggpubr::ggarrange(
 
 ggsave("dimension_multiplot.pdf", 
        plot=dimension_multiplot, device = "pdf", width = 10, height = 3.5, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 
 #### LATENT RANK ----
@@ -135,7 +123,7 @@ rank_X_totaltime <- d_sum |>
 
 ggsave("rank_X_totaltime.pdf", 
        plot=rank_X_totaltime, device = "pdf", width = 7, height = 5, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 summary(lm(log(total_time) ~ m*r + actual_sparsity, data=d_sum))
 # plot(lm(log(total_time) ~ m*r*actual_sparsity, data=d_sum))
@@ -149,7 +137,7 @@ rank_X_niterations <- d_sum |>
 
 ggsave("rank_X_niterations.pdf", 
        plot=rank_X_niterations, device = "pdf", width = 7, height = 5, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 rank_X_timeperiter <- d |> 
   filter(times > 0) |> 
@@ -160,7 +148,7 @@ rank_X_timeperiter <- d |>
 
 ggsave("rank_X_timeperiter.pdf", 
        plot=rank_X_timeperiter, device = "pdf", width = 7, height = 5, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 rank_multiplot <- ggpubr::ggarrange(
   rank_X_niterations, rank_X_totaltime, rank_X_timeperiter,
@@ -170,7 +158,7 @@ rank_multiplot <- ggpubr::ggarrange(
 
 ggsave("rank_multiplot.pdf", 
        plot=rank_multiplot, device = "pdf", width = 10, height = 3.5,  
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 #### SPARSITY ----
 sparsity_X_totaltime <- d_sum |> 
@@ -181,7 +169,7 @@ sparsity_X_totaltime <- d_sum |>
 
 ggsave("sparsity_X_totaltime.pdf", 
        plot=sparsity_X_totaltime, device = "pdf", width = 7, height = 5, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 summary(lm(log(total_time) ~ m*r + actual_sparsity, data=d_sum))
 # plot(lm(log(total_time) ~ m*r*actual_sparsity, data=d_sum))
@@ -196,7 +184,7 @@ sparsity_X_niterations <- d_sum |>
 
 ggsave("sparsity_X_niterations.pdf", 
        plot=sparsity_X_niterations, device = "pdf", width = 7, height = 5, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 sparsity_X_timeperiter <- d |> 
   filter(times > 0) |> 
@@ -208,7 +196,7 @@ sparsity_X_timeperiter <- d |>
 
 ggsave("sparsity_X_timeperiter.pdf", 
        plot=sparsity_X_timeperiter, device = "pdf", width = 7, height = 5, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 sparsity_multiplot <- ggpubr::ggarrange(
   sparsity_X_niterations, sparsity_X_totaltime, sparsity_X_timeperiter,
@@ -218,7 +206,7 @@ sparsity_multiplot <- ggpubr::ggarrange(
 
 ggsave("sparsity_multiplot.pdf", 
        plot=sparsity_multiplot, device = "pdf", width = 10, height = 3.5, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 
 ### algo runs in high dimensions
@@ -248,7 +236,7 @@ plot2save <- gridExtra::grid.arrange(
 
 ggsave("dimension_X_sparsity_X_rank_totaltime.pdf", 
        plot=plot2save, device = "pdf", width = 7, height = 7, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 # n iterations
 dimension_X_sparsity_X_rank_niters <- d_sum |> 
@@ -262,7 +250,7 @@ dimension_X_sparsity_X_rank_niters <- d_sum |>
 plot2save <- gridExtra::grid.arrange(dimension_X_sparsity_X_rank_niters, top = "Rank", right = "Sparsity")
 ggsave("dimension_X_sparsity_X_rank_niters.pdf", 
        plot=plot2save, device = "pdf", width = 7, height = 7, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 # time per iter
 dimension_X_sparsity_X_rank_timeperiter <- d |> 
@@ -284,7 +272,7 @@ dimension_X_sparsity_X_rank_timeperiter_grid_annot <- gridExtra::grid.arrange(
 ggsave("dimension_X_sparsity_X_rank_timeperiter.pdf", 
        plot=dimension_X_sparsity_X_rank_timeperiter_grid_annot, 
        device = "pdf", width = 7, height = 7, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 dimension_X_sparsity_X_rank_timeperiter_sparsity_on_x <- d |> 
   filter(times > 0) |> 
@@ -306,7 +294,7 @@ dimension_X_sparsity_X_rank_timeperiter_sparsity_on_x_grid_annot <- gridExtra::g
 ggsave("dimension_X_sparsity_X_rank_timeperiter_sparsity_on_x.pdf", 
        plot=dimension_X_sparsity_X_rank_timeperiter_sparsity_on_x_grid_annot, 
        device = "pdf", width = 7, height = 7, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 # multiplot total time and niterations: dimension on x ----
 dimension_X_sparsity_X_rank_totaltime <- d_sum |> 
@@ -341,7 +329,7 @@ dimension_X_sparsity_X_rank_time_niters_multiplot <-
 ggsave("dimension_X_sparsity_X_rank_time_niters_multiplot.pdf", 
        plot=dimension_X_sparsity_X_rank_time_niters_multiplot, 
        device = "pdf", width = 12, height = 6, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 
 ## different views for logtime and iter multiplot: rank on x ----
@@ -377,7 +365,7 @@ dimension_X_sparsity_X_rank_time_niters_multiplot <-
 ggsave("dimension_X_sparsity_X_rank_time_niters_multiplot_rank_onx.pdf", 
        plot=dimension_X_sparsity_X_rank_time_niters_multiplot, 
        device = "pdf", width = 12, height = 6, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 #### ANOMALY ----
 #### 
@@ -428,7 +416,7 @@ anmd_anomaly_multiplot <-
 
 ggsave("anmd_anomaly_multiplot.pdf", 
        plot=anmd_anomaly_multiplot, device = "pdf", width = 12, height = 6, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 # 3B-NMD anomaly ----
 bnmd_time_till_conv <- d_sum |>
@@ -474,7 +462,7 @@ bnmd_anomaly_multiplot <-
 
 ggsave("3bnmd_anomaly_multiplot.pdf", 
        plot=bnmd_anomaly_multiplot, device = "pdf", width = 12, height = 6, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 # anmd and 3b logtime anomaly mutiplot ----
 anmd_total_logtime_anomaly_anmd_3b <- d_sum |>
@@ -504,7 +492,7 @@ anmd_bnmd_logtime_anomaly_multiplot <-
 
 ggsave("anmd_bnmd_logtime_anomaly_multiplot.pdf", 
        plot=anmd_bnmd_logtime_anomaly_multiplot, device = "pdf", width = 12, height = 6, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 # anmd and 3b time anomaly mutiplot ----
 anmd_total_time_anomaly_anmd_3b <- d_sum |>
@@ -549,7 +537,7 @@ anmd_bnmd_time_anomaly_multiplot <-
 
 ggsave("anmd_bnmd_time_anomaly_multiplot.pdf", 
        plot=anmd_bnmd_time_anomaly_multiplot, device = "pdf", width = 12, height = 6, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 
 
@@ -673,7 +661,7 @@ anmd_time_till_conv_plots <- plot_grid(
 
 ggsave("anmd_time_till_conv.pdf", 
        plot=anmd_time_till_conv_plots, device = "pdf", width = 10, height = 5, 
-       units = "in", dpi = 300, path = "./simulation_nbs/plots/")
+       units = "in", dpi = 300, path = "./plots/")
 
 
 
