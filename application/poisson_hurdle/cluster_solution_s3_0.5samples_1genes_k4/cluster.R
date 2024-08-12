@@ -1,0 +1,82 @@
+#library(PHclust)
+#library(readxl)
+
+#setwd("~/ph")
+source("../Hybrid.R")
+
+logfile <- paste0("log_", lubridate::now(), ".txt")
+
+add_date_at_start <- function(msg) {
+  now <- lubridate::now()
+  return(paste0(now, " -> ", msg))
+}
+
+write_log <- function(line, append = TRUE, path = logfile) {
+  write(line, file = path, append = append)     
+}
+
+write_log(add_date_at_start("Read data"), append = FALSE)
+
+#### Read data ----
+d <- readRDS("../S3_filtered_with_counts.RDS")
+
+seed <- 64871
+set.seed(seed)
+samples_in <- 0.5
+samples_out <- 1.0 - samples_in
+keep <- sample(c(TRUE, FALSE), size = nrow(d), replace = TRUE, 
+               prob = c(samples_in, samples_out))
+dm <- as.matrix(d[keep, -1])
+total_counts_per_gene <- colSums(dm)
+genes_in <- 1.0
+genes_out <- 1.0 - genes_in
+dm_high <- dm[ , total_counts_per_gene > quantile(total_counts_per_gene, genes_out)]
+dim(dm_high)
+
+rows2keep <- which(keep)
+cols2keep <- which(total_counts_per_gene > quantile(total_counts_per_gene, genes_out))
+
+k <- 4
+
+#### cluster for absolute abundances ----
+write_log(
+  add_date_at_start(
+    paste0("Do clustering with ", k, " clusters (absolute abundance")), 
+  append = TRUE)
+
+clust <- PHcluster(dm_high, Treatment = rep_len(1, ncol(dm_high)), 
+                   nK=k, 
+                   absolute=TRUE, method = "EM")
+
+#### saving rds for absolute abundances ----
+write_log(add_date_at_start("Saving result to file"), 
+          append = TRUE)
+abs_path <- paste0(
+  "cluster_solution_s3_all_absolute_abundance_", 
+  samples_in, "samples_", 
+  genes_in, "genes_", 
+  "k", k,".RDS")
+saveRDS(clust, abs_path)
+
+
+write_log(
+  add_date_at_start(
+    paste0("Do clustering with ", k, " clusters (relative abundance")),
+  append = TRUE)
+
+#### cluster for relative abundances ----
+k_rel <- k
+clust_rel <- PHcluster(dm_high, Treatment = rep_len(1, ncol(dm_high)), 
+                       nK=k_rel, absolute=FALSE, method = "EM")
+
+#### saving rds for relative abundances ----
+rel_path <- paste0(
+  "cluster_solution_s3_all_relative_abundance_", 
+  samples_in, "samples_", 
+  genes_in, "genes_", 
+  "k", k_rel,".RDS")
+
+saveRDS(clust_rel, rel_path)
+
+write_log(add_date_at_start("Saving result to file"), 
+          append = TRUE)
