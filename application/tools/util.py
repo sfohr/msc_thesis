@@ -4,46 +4,64 @@ import scanpy as sc
 from scipy.stats import median_abs_deviation
 
 
-def convert_to_dense_counts(adata, layer=None):
+def convert_to_dense(adata, layer=None):
 
     if layer is None:
-        count_data = adata.X
+        data = adata.X
     else:
-        count_data = adata.layers[layer]
+        data = adata.layers[layer]
 
-    if type(count_data) == sps._csr.csr_matrix:
-        count_data = count_data.toarray()
+    if type(data) == sps._csr.csr_matrix:
+        data = data.toarray()
+
+    return data
+
+
+def convert_to_dense_counts(adata, layer=None):
+
+    count_data = convert_to_dense(adata, layer)
     count_data = count_data.astype(int)
 
     return count_data
 
 
-def filter_outliers(adata, type="mad", nmads=5, min_cells=2, min_genes=2, max_counts=None):
+def filter_outliers(
+    adata,
+    type="mad",
+    nmads=5,
+    min_cells=2,
+    min_genes=2,
+    max_counts=None,
+):
 
-    if not (("log1p_n_genes_by_counts" in adata.obs.index) and ("log1p_total_counts" in adata.obs.index)):
-        sc.pp.calculate_qc_metrics(adata, var_type="genes", percent_top=None, log1p=True, inplace=True)
+    if not (
+        ("log1p_n_genes_by_counts" in adata.obs.index)
+        and ("log1p_total_counts" in adata.obs.index)
+    ):
+        sc.pp.calculate_qc_metrics(
+            adata, var_type="genes", percent_top=None, log1p=True, inplace=True
+        )
 
     if type == "mad":
-        adata.obs["outlier"] = (
-                is_outlier(adata, "log1p_total_counts", nmads=nmads)
-                | is_outlier(adata, "log1p_n_genes_by_counts", nmads=nmads)
-        )
+        adata.obs["outlier"] = is_outlier(
+            adata, "log1p_total_counts", nmads=nmads
+        ) | is_outlier(adata, "log1p_n_genes_by_counts", nmads=nmads)
     elif type == "max":
-        adata.obs["outlier"] = (
-            adata.obs["total_counts"] > max_counts
-        )
+        adata.obs["outlier"] = adata.obs["total_counts"] > max_counts
 
     data_out = adata.copy()
     data_out = data_out[(~data_out.obs.outlier)].copy()
 
     sc.pp.filter_cells(data_out, min_genes=min_genes)
     sc.pp.filter_genes(data_out, min_cells=min_cells)
-    sc.pp.calculate_qc_metrics(data_out, var_type="genes", percent_top=None, log1p=True, inplace=True)
+    sc.pp.calculate_qc_metrics(
+        data_out, var_type="genes", percent_top=None, log1p=True, inplace=True
+    )
 
     return data_out
 
 
-def is_outlier(adata, metric: str, nmads: int):
+def is_outlier(adata, metric, nmads):
     M = adata.obs[metric]
     outlier = (M < np.median(M) - nmads * median_abs_deviation(M)) | (
         np.median(M) + nmads * median_abs_deviation(M) < M
@@ -54,7 +72,9 @@ def is_outlier(adata, metric: str, nmads: int):
 def rotate_umap(umap, theta, mirror=np.array([[1, 0], [0, 1]])):
     umap_mean = umap.mean(axis=0)
     X_umap_2 = umap - umap_mean
-    rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+    rotation_matrix = np.array(
+        [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]
+    )
     X_umap_2 = np.matmul(np.matmul(X_umap_2, rotation_matrix), mirror) + umap_mean
 
     return X_umap_2

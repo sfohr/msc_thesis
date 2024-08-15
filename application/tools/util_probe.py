@@ -6,7 +6,9 @@ import scipy.sparse as sps
 
 def prep_probe_BacSC_data(adata, gene_id_key="gene_ids", agg_fn=np.max):
 
-    gene_ids = adata.var[gene_id_key].str.extract('(?P<gene>[\s\S]+)_(?P<id>[\s\S]+)', expand=True)
+    gene_ids = adata.var[gene_id_key].str.extract(
+        "(?P<gene>[\s\S]+)_(?P<id>[\s\S]+)", expand=True
+    )
     adata.var["gene"] = gene_ids["gene"]
     adata.var["probe_id"] = gene_ids["id"]
 
@@ -15,7 +17,9 @@ def prep_probe_BacSC_data(adata, gene_id_key="gene_ids", agg_fn=np.max):
     data_pool = ad.AnnData(
         X=sps.csr_matrix(X_agg),
         obs=adata.obs,
-        var=pd.DataFrame({"feature_types": "Gene Expression", "genome": "PA01"}, index=agg_features)
+        var=pd.DataFrame(
+            {"feature_types": "Gene Expression", "genome": "PA01"}, index=agg_features
+        ),
     )
 
     return data_pool

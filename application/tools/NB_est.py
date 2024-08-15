@@ -1,8 +1,13 @@
 import numpy as np
-from scipy.special import gammaln, factorial
+from scipy.special import gammaln, factorial, expit
 from scipy.optimize import fmin_l_bfgs_b as optim
-from statsmodels.discrete.count_model import NegativeBinomialP, ZeroInflatedNegativeBinomialP, Poisson, ZeroInflatedPoisson
-from scipy.stats import logistic, chi2
+from statsmodels.discrete.count_model import (
+    NegativeBinomialP,
+    ZeroInflatedNegativeBinomialP,
+    Poisson,
+    ZeroInflatedPoisson,
+)
+from scipy.stats import chi2
 
 import tools.util as ut
 import tools.scTransform as sct
@@ -19,11 +24,13 @@ def fit_nbinom(X, initial_params=None):
 
         # MLE estimate based on the formula on Wikipedia:
         # http://en.wikipedia.org/wiki/Negative_binomial_distribution#Maximum_likelihood_estimation
-        result = np.sum(gammaln(X + r)) \
-            - np.sum(np.log(factorial(X))) \
-            - N*(gammaln(r)) \
-            + N*r*np.log(p) \
-            + np.sum(X*np.log(1-(p if p < 1 else 1-infinitesimal)))
+        result = (
+            np.sum(gammaln(X + r))
+            - np.sum(np.log(factorial(X)))
+            - N * (gammaln(r))
+            + N * r * np.log(p)
+            + np.sum(X * np.log(1 - (p if p < 1 else 1 - infinitesimal)))
+        )
 
         return -result
 
@@ -31,27 +38,25 @@ def fit_nbinom(X, initial_params=None):
         # reasonable initial values (from fitdistr function in R)
         m = np.mean(X)
         v = np.var(X)
-        size = (m**2)/(v-m) if v > m else 10
+        size = (m**2) / (v - m) if v > m else 10
 
         # convert mu/size parameterization to prob/size
-        p0 = size / ((size+m) if size+m != 0 else 1)
+        p0 = size / ((size + m) if size + m != 0 else 1)
         r0 = size
         initial_params = np.array([r0, p0])
 
     bounds = [(infinitesimal, None), (infinitesimal, 1)]
-    optimres = optim(log_likelihood,
-                     x0=initial_params,
-                     args=(X,),
-                     approx_grad=1,
-                     bounds=bounds)
+    optimres = optim(
+        log_likelihood, x0=initial_params, args=(X,), approx_grad=1, bounds=bounds
+    )
 
     params = optimres[0]
-    return {'size': params[0], 'prob': params[1]}
+    return {"size": params[0], "prob": params[1]}
 
 
 def negbin_mean_to_numpy(mu, b):
     r = b
-    var = mu + (1 / b) * mu ** 2
+    var = mu + (1 / b) * mu**2
     p = (var - mu) / var
 
     return r, 1 - p
@@ -63,7 +68,14 @@ def negbin_numpy_to_mean(r, p):
     return mu, b
 
 
-def estimate_overdisp_nb(adata, layer=None, cutoff=0.01, flavor="sctransform"):
+def estimate_overdisp_nb(
+    adata,
+    layer=None,
+    cutoff=0.01,
+    flavor="sctransform",
+    use_init_params=True,
+    seed=1234,
+):
 
     if flavor == "BFGS":
         count_data = ut.convert_to_dense_counts(adata, layer)
@@ -87,25 +99,40 @@ def estimate_overdisp_nb(adata, layer=None, cutoff=0.01, flavor="sctransform"):
         adata.var["nb_overdisp"] = overdisps
 
         adata.var["nb_overdisp_cutoff"] = adata.var["nb_overdisp"]
-        adata.var["nb_overdisp_cutoff"][adata.var["nb_overdisp_cutoff"] < cutoff] = cutoff
-        adata.var["nb_overdisp_cutoff"][(adata.var["nb_overdisp"] > 0.1 * adata.var["total_counts"])] = cutoff
+        adata.var["nb_overdisp_cutoff"][
+            adata.var["nb_overdisp_cutoff"] < cutoff
+        ] = cutoff
+        adata.var["nb_overdisp_cutoff"][
+            (adata.var["nb_overdisp"] > 0.1 * adata.var["total_counts"])
+        ] = cutoff
 
     elif flavor == "sctransform":
-        adata_sct = sct.SCTransform(adata,
-                                    layer=layer,
-                                    min_cells=1,
-                                    gmean_eps=1,
-                                    n_genes=2000,
-                                    n_cells=None,  # use all cells
-                                    bin_size=500,
-                                    bw_adjust=3,
-                                    inplace=False)
+        adata_sct = sct.SCTransform(
+            adata,
+            layer=layer,
+            min_cells=1,
+            gmean_eps=1,
+            n_genes=2000,
+            n_cells=None,  # use all cells
+            bin_size=500,
+            bw_adjust=3,
+            inplace=False,
+            seed=seed,
+        )
         adata.var["is_scd_outlier"] = adata_sct.var["is_scd_outlier"]
         adata.var["nb_overdisp"] = adata_sct.var["theta_sct"]
         adata.var["nb_overdisp_cutoff"] = adata.var["nb_overdisp"]
-        adata.var["nb_overdisp_cutoff"][adata.var["nb_overdisp_cutoff"] < cutoff] = cutoff
-        adata.var["nb_overdisp_cutoff"][np.isnan(adata.var["nb_overdisp_cutoff"])] = cutoff
+        adata.var["nb_overdisp_cutoff"][
+            adata.var["nb_overdisp_cutoff"] < cutoff
+        ] = cutoff
+        adata.var["nb_overdisp_cutoff"][
+            np.isnan(adata.var["nb_overdisp_cutoff"])
+        ] = cutoff
         adata.var["nb_mean"] = adata_sct.var["Intercept_sct"]
+        adata.var["nb_umi"] = adata_sct.var["log_umi_sct"]
+        adata.var["Intercept_step1_sct"] = adata_sct.var["Intercept_step1_sct"]
+        adata.var["log_umi_step1_sct"] = adata_sct.var["log_umi_step1_sct"]
+        adata.var["dispersion_step1_sct"] = adata_sct.var["dispersion_step1_sct"]
 
     elif flavor == "moments":
         count_data = ut.convert_to_dense_counts(adata, layer)
@@ -133,9 +160,9 @@ def estimate_overdisp_nb(adata, layer=None, cutoff=0.01, flavor="sctransform"):
             dat = count_data[:, i].T
 
             model_nb = NegativeBinomialP(dat, np.ones(n))
-            res_nb = model_nb.fit(method='bfgs', maxiter=5000, maxfun=5000, disp=0)
+            res_nb = model_nb.fit(method="bfgs", maxiter=5000, maxfun=5000, disp=0)
             means.append(np.exp(res_nb.params[0]))
-            overdisps.append(1/res_nb.params[1])
+            overdisps.append(1 / res_nb.params[1])
 
         adata.var["nb_mean"] = means
         adata.var["nb_overdisp"] = overdisps
@@ -147,11 +174,36 @@ def estimate_overdisp_nb(adata, layer=None, cutoff=0.01, flavor="sctransform"):
         adata.var["gene_mean"] = np.mean(count_data, axis=0)
         adata.var["gene_var"] = np.var(count_data, axis=0)
         adata.var["mean_var_diff"] = adata.var["gene_mean"] - adata.var["gene_var"]
-        adata.var["gene_dist"] = ["nb" if x < 0 else "poi" for x in adata.var["mean_var_diff"]]
+        adata.var["gene_dist"] = [
+            "nb" if x < 0 else "poi" for x in adata.var["mean_var_diff"]
+        ]
 
         overdisps = []
         means = []
         zinf_params = []
+
+        if use_init_params:
+            init_zinfs = [
+                len(count_data[:, i][count_data[:, i] == 0]) / n for i in range(p)
+            ]
+            init_means = [
+                np.log(np.mean(count_data[:, i][count_data[:, i] != 0]))
+                # if init_zinfs[i] > 0.65 else np.log(np.mean(count_data[:, i]))
+                for i in range(p)
+            ]
+            init_ods = [
+                (
+                    np.var(count_data[:, i][count_data[:, i] > 0])
+                    - np.mean(count_data[:, i][count_data[:, i] > 0])
+                )
+                / (np.mean(count_data[:, i][count_data[:, i] > 0])) ** 2
+                # if init_zinfs[i] > 0.65 else np.var(count_data[:, i]) - np.mean(count_data[:, i])
+                for i in range(p)
+            ]
+        else:
+            init_means = np.zeros(p)
+            init_ods = np.zeros(p)
+            init_zinfs = np.zeros(p)
 
         for i in range(p):
 
@@ -159,53 +211,82 @@ def estimate_overdisp_nb(adata, layer=None, cutoff=0.01, flavor="sctransform"):
                 print(f"gene {i}")
 
             dat = count_data[:, i].T
-            dist = adata.var["gene_dist"][i]
+            dist = adata.var["gene_dist"].iloc[i]
 
             if dist == "poi":
                 overdisps.append(np.inf)
 
                 model_zipoi = ZeroInflatedPoisson(dat, np.ones(n))
-                res_zipoi = model_zipoi.fit(method='bfgs', maxiter=5000, maxfun=5000, disp=0)
+                res_zipoi = model_zipoi.fit(
+                    method="bfgs",
+                    maxiter=5000,
+                    maxfun=5000,
+                    disp=0,
+                    start_params=[init_ods[i], init_means[i]],
+                )
 
-                model_poi = Poisson(dat, np.ones(n))
-                res_poi = model_poi.fit(method='bfgs', maxiter=5000, maxfun=5000, disp=0)
+                # model_poi = Poisson(dat, np.ones(n))
+                # res_poi = model_poi.fit(method='bfgs', maxiter=5000, maxfun=5000, disp=0, start_params=[init_means[i]])
 
                 zipoi_loglik = res_zipoi.llf
-                poi_loglik = res_poi.llf
+                # poi_loglik = res_poi.llf
+                poi_loglik = -np.inf
 
                 stat = 2 * (zipoi_loglik - poi_loglik)
-                pvalue = 1 - chi2.ppf(stat, 1)
+                pvalue = 1 - chi2.cdf(stat, 1)
 
                 if pvalue < 0.05:
                     means.append(np.exp(res_zipoi.params[1]))
-                    zinf_params.append(logistic.pdf(res_zipoi.params[0]))
+                    zinf_params.append(expit(res_zipoi.params[0]))
                 else:
-                    means.append(np.exp(res_poi.params[0]))
-                    zinf_params.append(0.)
+                    # means.append(np.exp(res_poi.params[0]))
+                    means.append(np.exp(res_zipoi.params[1]))
+                    zinf_params.append(0.0)
 
             elif dist == "nb":
                 model_zinb = ZeroInflatedNegativeBinomialP(dat, np.ones(n))
-                res_zinb = model_zinb.fit(method='bfgs', maxiter=5000, maxfun=5000, disp=0)
+                res_zinb = model_zinb.fit(
+                    method="bfgs",
+                    maxiter=5000,
+                    disp=0,
+                    start_params=[init_zinfs[i], init_means[i], init_ods[i]],
+                )
 
                 model_nb = NegativeBinomialP(dat, np.ones(n))
-                res_nb = model_nb.fit(method='bfgs', maxiter=5000, maxfun=5000, disp=0)
+                res_nb = model_nb.fit(
+                    method="bfgs",
+                    maxiter=5000,
+                    disp=0,
+                    start_params=[init_means[i], init_ods[i]],
+                )
 
                 zinb_loglik = res_zinb.llf
                 nb_loglik = res_nb.llf
 
                 stat = 2 * (zinb_loglik - nb_loglik)
-                pvalue = 1 - chi2.ppf(stat, 1)
+                pvalue = 1 - chi2.cdf(stat, 1)
 
-                if pvalue < 0.05 or np.isnan(nb_loglik):
-                    means.append(np.exp(res_zinb.params[1]))
-                    zinf_params.append(logistic.pdf(res_zinb.params[0]))
-                    overdisps.append(1 / res_zinb.params[2])
-                else:
+                if not res_zinb.converged:
+                    if not res_nb.converged:
+                        print(
+                            "Both NB and ZINB not converged! Using NB without starting params"
+                        )
+                        model_nb = NegativeBinomialP(dat, np.ones(n))
+                        res_nb = model_nb.fit(method="bfgs", maxiter=5000, disp=0)
+
                     means.append(np.exp(res_nb.params[0]))
-                    zinf_params.append(0.)
+                    zinf_params.append(0.0)
                     overdisps.append(1 / res_nb.params[1])
+                else:
+                    if pvalue < 0.05 or np.isnan(nb_loglik):
+                        means.append(np.exp(res_zinb.params[1]))
+                        zinf_params.append(expit(res_zinb.params[0]))
+                        overdisps.append(1 / res_zinb.params[2])
+                    else:
+                        means.append(np.exp(res_nb.params[0]))
+                        zinf_params.append(0.0)
+                        overdisps.append(1 / res_nb.params[1])
 
         adata.var["est_mean"] = means
         adata.var["est_overdisp"] = overdisps
         adata.var["est_zero_inflation"] = zinf_params
-
