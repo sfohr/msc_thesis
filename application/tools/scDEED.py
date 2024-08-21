@@ -62,10 +62,18 @@ def scDEED(
     )
 
     rel_scores = calculate_reliability_scores(
-        adata, embedding_method, n_pcs, dim_red_method, obsm_embedding_key, similarity_percent
+        adata,
+        embedding_method,
+        n_pcs,
+        obsm_embedding_key,
+        similarity_percent,
     )
     null_rel_scores = calculate_reliability_scores(
-        data_perm, embedding_method, n_pcs, dim_red_method, obsm_embedding_key, similarity_percent
+        data_perm,
+        embedding_method,
+        n_pcs,
+        obsm_embedding_key,
+        similarity_percent,
     )
 
     null_percentile_dubious = np.percentile(null_rel_scores, 5)
@@ -88,16 +96,20 @@ def scDEED(
 def create_permuted_data_scdeed(adata, rng_seed=None):
 
     data_perm = adata.copy()
+    rng = np.random.default_rng(rng_seed)
 
     if type(data_perm.X) == scipy.sparse._csr.csr_matrix:
         # data_perm.X = data_perm.X.todense()
         data_perm.X = data_perm.X.toarray()
-
-    rng = np.random.default_rng(rng_seed)
-    data_perm = ad.AnnData(
-        # X=scipy.sparse._csr.csr_matrix(rng.permuted(adata.X.copy().toarray(), axis=0))
-        X=scipy.sparse._csr.csr_matrix(rng.permuted(adata.X.copy().todense(), axis=0))
-    )
+        data_perm = ad.AnnData(
+            X=scipy.sparse._csr.csr_matrix(
+                rng.permuted(adata.X.copy().toarray(), axis=0)
+            )
+        )
+    else:
+        data_perm = ad.AnnData(
+            X=scipy.sparse._csr.csr_matrix(rng.permuted(adata.X.copy(), axis=0))
+        )
 
     return data_perm
 
@@ -107,7 +119,7 @@ def embed_data_scDEED(
     n_pcs=3,
     dim_red_method="PCA",
     dim_red_params=None,
-    obsm_embedding_key=None,
+    obsm_embedding_key="X_pca",
     n_neighbors=20,
     embedding_method="UMAP",
     min_dist=0.1,
@@ -119,60 +131,62 @@ def embed_data_scDEED(
         case "PCA":
             if obsm_embedding_key not in adata.obsm_keys():
                 sc.pp.scale(adata, max_value=10, zero_center=True)
-                sc.pp.pca(adata, svd_solver="arpack")
-            sc.pp.neighbors(adata, n_neighbors=n_neighbors, n_pcs=n_pcs, use_rep=obsm_embedding_key)
-        case "NMD-T":
-            if obsm_embedding_key not in adata.obsm.keys():
-                beta = dim_red_params.get("beta")
-                tol_over_10iters = dim_red_params.get("tol_over_10iters")
-                m, n = adata.X.shape
-                # X_anmd = ut.convert_to_dense_counts(adata, layer="normalized_counts")
-                X = ut.convert_to_dense_counts(adata)
-                m, n = X.shape
-                W0, H0 = cs.nuclear_norm_init(X, m, n, n_pcs)
-                _, W_nmd, _, _, _, _ = nmd.nmd_t(
-                    X,
-                    r=n_pcs,
-                    W0=W0,
-                    H0=H0,
-                    beta1=beta,
-                    tol_over_10iters=tol_over_10iters,
-                    verbose=False,
+                sc.pp.pca(
+                    adata,
+                    svd_solver="arpack",
                 )
-                adata.obsm[obsm_embedding_key] = W_nmd
+                obsm_embedding_key = "X_pca"
             sc.pp.neighbors(
-                adata, n_neighbors=n_neighbors, n_pcs=n_pcs, use_rep=obsm_embedding_key
+                adata,
+                n_neighbors=n_neighbors,
+                n_pcs=n_pcs,
+                use_rep=obsm_embedding_key,
+                key_added=dim_red_method,
             )
         case "3B-NMD":
             if obsm_embedding_key not in adata.obsm.keys():
-                
+
                 beta = dim_red_params.get("beta1", 0.7)
-                manual_max_iterations = dim_red_params.get("manual_max_iterations", n_pcs*100)
+                manual_max_iterations = dim_red_params.get(
+                    "manual_max_iterations", n_pcs * 100
+                )
                 verbose = dim_red_params.get("verbose", True)
-                
-                X = ut.convert_to_dense_counts(adata)
+
+                X = ut.convert_to_dense(adata)  # assumes data is in adata.X
                 n, p = X.shape
                 W0, H0 = cs.nuclear_norm_init(X, n, p, n_pcs)
-                
+
                 init_strat = InitializationStrategy.KNOWN_MATRIX
                 kernel_strat = KernelStrategy.MOMENTUM_3_BLOCK_MODEL_FREE
-                
+
                 kernel_parameters = kernelInputTypes.Momentum3BlockAdditionalParameters(
-                    momentum_beta=beta, candidate_factor_W0=W0, candidate_factor_H0=H0,
+                    momentum_beta=beta,
+                    candidate_factor_W0=W0,
+                    candidate_factor_H0=H0,
                 )
-                
+
                 result = nomad.decompose(
-                    X, n_pcs, kernel_strategy=kernel_strat, initialization=init_strat,         
-                    kernel_params=kernel_parameters, 
-                    manual_max_iterations=manual_max_iterations,   
-                    verbose=verbose, tolerance=None)
-                
+                    X,
+                    n_pcs,
+                    kernel_strategy=kernel_strat,
+                    initialization=init_strat,
+                    kernel_params=kernel_parameters,
+                    manual_max_iterations=manual_max_iterations,
+                    verbose=verbose,
+                    tolerance=None,
+                )
+
                 W = result.factors[0]
-                
+
                 adata.obsm[obsm_embedding_key] = W
-                
-            sc.pp.neighbors(adata, n_neighbors=n_neighbors, n_pcs=n_pcs, 
-                            use_rep=obsm_embedding_key)
+
+            sc.pp.neighbors(
+                adata,
+                n_neighbors=n_neighbors,
+                n_pcs=n_pcs,
+                use_rep=obsm_embedding_key,
+                key_added=dim_red_method,
+            )
         case _:
             raise ValueError(
                 f"{dim_red_method} is not a valid dimensionality reduction method!"
@@ -182,16 +196,23 @@ def embed_data_scDEED(
         rng_seed = 0
 
     if embedding_method == "UMAP":
+        # TODO: check if neighbors_key is valid (https://scanpy.readthedocs.io/en/stable/generated/scanpy.tl.umap.html)
         sc.tl.umap(
             adata,
-            neighbors_key="neighbors",
+            # neighbors_key=f"{dim_red_method}_neighbors",
+            neighbors_key=dim_red_method,
             min_dist=min_dist,
             spread=1,
             random_state=rng_seed,
         )
-        # sc.pl.umap(adata)
     elif embedding_method == "tsne":
-        sc.tl.tsne(adata, neighbors_key="neighbors", perplexity=perplexity)
+        # TODO: check if neighbors_key is valid (https://scanpy.readthedocs.io/en/stable/generated/scanpy.tl.umap.html)
+        sc.tl.tsne(
+            adata,
+            neighbors_key=dim_red_method,
+            perplexity=perplexity,
+            # neighbors_key=f"{dim_red_method}_neighbors", perplexity=perplexity
+        )
     else:
         raise ValueError(f"{embedding_method} is not a valid embedding method!")
 
@@ -202,7 +223,6 @@ def calculate_reliability_scores(
     adata,
     embedding_method="UMAP",
     n_pcs=3,
-    dim_red_method="PCA",
     obsm_embedding_key="X_pca",
     similarity_percent=0.5,
 ):
@@ -216,13 +236,6 @@ def calculate_reliability_scores(
     else:
         raise ValueError(f"{embedding_method} is not a valid embedding method!")
 
-    #match dim_red_method:
-    #    case "PCA":
-    #        obsm_layer_embeddings = "X_pca"
-    #    case "NMD-T":
-    #        obsm_layer_embeddings = "X_nmdt"
-    #    case "3B-NMD":
-    #        obsm_layer_embeddings = "X_3b"
     obsm_layer_embeddings = obsm_embedding_key
 
     dist_pca = squareform(
@@ -301,10 +314,9 @@ def scdeed_parameter_selection(
                 "embedding_reliability"
             ].tolist()
 
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
-
             if save_path is not None:
+                if not os.path.exists(save_path):
+                    os.makedirs(save_path)
                 with open(f"{save_path}/scdeed_rel_scores.pkl", "wb") as f:
                     pkl.dump(rel_scores, f)
                 with open(f"{save_path}/scdeed_null_rel_scores.pkl", "wb") as f:

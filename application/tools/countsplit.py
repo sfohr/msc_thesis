@@ -8,7 +8,7 @@ from itertools import product
 import tools.util as ut
 
 import tools.NMD as nmd
-from scipy.sparse.linalg import svds
+
 from tools.nuclear_norm_init import nuclear_norm_init
 
 import fi_nomad as nomad
@@ -83,12 +83,12 @@ def countsplit_adata(
     sc.pp.calculate_qc_metrics(
         adata_train, var_type="PCs", percent_top=None, log1p=True, inplace=True
     )
-    adata_train.layers[layer] = adata_train.X.copy()
+    adata_train.layers["counts"] = adata_train.X.copy()
 
     sc.pp.calculate_qc_metrics(
         adata_test, var_type="PCs", percent_top=None, log1p=True, inplace=True
     )
-    adata_test.layers[layer] = adata_test.X.copy()
+    adata_test.layers["counts"] = adata_test.X.copy()
 
     if data_dist == "NB":
         adata_train.var["nb_mean"] = adata_train.var[mean_key] * epsilon
@@ -99,7 +99,7 @@ def countsplit_adata(
     return adata_train, adata_test
 
 
-def select_n_pcs_countsplit(train_data, test_data, max_k=20, layer=None):
+def select_n_pcs_countsplit(train_data, test_data, max_k=20):
 
     def approx_k(U, s, V, k):
         s_ = s[:k]
@@ -108,8 +108,10 @@ def select_n_pcs_countsplit(train_data, test_data, max_k=20, layer=None):
         ret = u_ @ np.diag(s_) @ v_
         return ret
 
-    X_train = ut.convert_to_dense_counts(train_data)
-    X_test = ut.convert_to_dense_counts(test_data)
+    # X_train = ut.convert_to_dense_counts(train_data)
+    X_train = ut.convert_to_dense(train_data)
+    # X_test = ut.convert_to_dense_counts(test_data)
+    X_test = ut.convert_to_dense(test_data)
 
     u_train, s_train, v_train = np.linalg.svd(X_train, full_matrices=False)
     k_devs = [
@@ -123,52 +125,7 @@ def select_n_pcs_countsplit(train_data, test_data, max_k=20, layer=None):
     return k_devs, opt_k
 
 
-def select_nmd_t_params_countsplit(
-    train_data,
-    test_data,
-    potential_ks=[20, 10, 5, 3],
-    layer="counts",
-    potential_betas=[0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-    tol_over_10iters=1.0e-4,
-):
-    X_train = ut.convert_to_dense_counts(train_data, layer=layer)
-    X_test = ut.convert_to_dense_counts(test_data, layer=layer)
-
-    m, n = X_train.shape
-
-    results_df = generate_dataframe(
-        k=potential_ks, beta=potential_betas, val_colname="loss"
-    )
-
-    for k in potential_ks:
-        print(f"################## LATENT DIM {k}")
-        W0, H0 = nuclear_norm_init(X_train, m, n, k)
-
-        for beta in potential_betas:
-            print(f"################## BETA {beta}")
-
-            _, W0, H0, _, _, _ = nmd.nmd_t(
-                X_train,
-                r=k,
-                W0=W0,
-                H0=H0,
-                tol_over_10iters=tol_over_10iters,
-                beta1=beta,
-                verbose=False,
-            )
-            # TODO: IndexError: index 4 is out of bounds for axis 0 with size 4
-            results_df = add_result(
-                results_df,
-                val_col="loss",
-                val=np.linalg.norm(X_test - np.maximum(0, W0 @ H0), ord="fro"),
-                k=k,
-                beta=beta,
-            )
-
-    return results_df
-
-
-def select_3b_params_nomad_countsplit(
+def select_3b_params_countsplit(
     train_data,
     test_data,
     potential_ks=[10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
@@ -221,51 +178,6 @@ def select_3b_params_nomad_countsplit(
                 k=k,
                 beta=beta,
             )
-    return results_df
-
-
-def select_3b_params_countsplit(
-    train_data,
-    test_data,
-    potential_ks=[20, 10, 5, 3],
-    layer="counts",
-    potential_betas=[0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-    tol_over_10iters=1.0e-4,
-):
-    X_train = ut.convert_to_dense_counts(train_data, layer=layer)
-    X_test = ut.convert_to_dense_counts(test_data, layer=layer)
-
-    m, n = X_train.shape
-
-    results_df = generate_dataframe(
-        k=potential_ks, beta=potential_betas, val_colname="loss"
-    )
-
-    for k in potential_ks:
-        print(f"################## LATENT DIM {k}")
-
-        for beta in potential_betas:
-            print(f"################## BETA {beta}")
-            W0, H0 = nuclear_norm_init(X_train, m, n, k)
-
-            _, W0, H0, _, _, _ = nmd.nmd_3b(
-                X_train,
-                r=k,
-                W0=W0,
-                H0=H0,
-                tol_over_10iters=tol_over_10iters,
-                beta1=beta,
-                verbose=False,
-            )
-
-            results_df = add_result(
-                results_df,
-                val_col="loss",
-                val=np.linalg.norm(X_test - np.maximum(0, W0 @ H0), ord="fro"),
-                k=k,
-                beta=beta,
-            )
-
     return results_df
 
 
@@ -323,16 +235,16 @@ def generate_dataframe(val_colname="loss", **kwargs):
                       The DataFrame has columns specified by the keys of the dictionaries,
                       and an additional empty column with the specified name.
     """
-    # Extract column names and values from kwargs
-    columns = list(kwargs.keys())
+    # Extract dict keys and values from kwargs
+    colnames = list(kwargs.keys())
     values = list(kwargs.values())
 
     # Generate all combinations of values
     combinations = list(product(*values))
 
-    # Create DataFrame with columns based on column names
-    df = pd.DataFrame(combinations, columns=columns)
-    df[val_colname] = pd.Series(dtype=float)  # Creating an empty column
+    # Create DataFrame with columns named after dict keys
+    df = pd.DataFrame(combinations, columns=colnames)
+    df[val_colname] = pd.Series(dtype=float)  # Creates an empty column
 
     return df
 
@@ -359,3 +271,48 @@ def add_result(df, val_col, val, **kwargs):
     df.loc[mask, val_col] = val
 
     return df
+
+
+def select_nmd_t_params_countsplit(
+    train_data,
+    test_data,
+    potential_ks=[20, 10, 5, 3],
+    layer="counts",
+    potential_betas=[0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+    tol_over_10iters=1.0e-4,
+):
+    X_train = ut.convert_to_dense_counts(train_data, layer=layer)
+    X_test = ut.convert_to_dense_counts(test_data, layer=layer)
+
+    m, n = X_train.shape
+
+    results_df = generate_dataframe(
+        k=potential_ks, beta=potential_betas, val_colname="loss"
+    )
+
+    for k in potential_ks:
+        print(f"################## LATENT DIM {k}")
+        W0, H0 = nuclear_norm_init(X_train, m, n, k)
+
+        for beta in potential_betas:
+            print(f"################## BETA {beta}")
+
+            _, W0, H0, _, _, _ = nmd.nmd_t(
+                X_train,
+                r=k,
+                W0=W0,
+                H0=H0,
+                tol_over_10iters=tol_over_10iters,
+                beta1=beta,
+                verbose=False,
+            )
+            # TODO: IndexError: index 4 is out of bounds for axis 0 with size 4
+            results_df = add_result(
+                results_df,
+                val_col="loss",
+                val=np.linalg.norm(X_test - np.maximum(0, W0 @ H0), ord="fro"),
+                k=k,
+                beta=beta,
+            )
+
+    return results_df

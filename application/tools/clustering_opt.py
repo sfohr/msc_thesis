@@ -4,8 +4,13 @@ import pandas as pd
 from scipy.special import binom
 
 
-def modularity(adata, partition_key, resolution, neighbors_key="connectivities"):
-    conn_matrix = adata.obsp[neighbors_key]
+def modularity(adata, partition_key, resolution, neighbors_key=None):
+
+    if neighbors_key is None:
+        conn_matrix = adata.obsp["connectivities"]
+    else:
+        neighbors_key = adata.uns[neighbors_key]["connectivities_key"]
+        conn_matrix = adata.obsp[neighbors_key]
     partition = adata.obs[partition_key]
     cluster_names = np.unique(partition)
 
@@ -25,8 +30,12 @@ def modularity(adata, partition_key, resolution, neighbors_key="connectivities")
     return mod
 
 
-def cpm(adata, partition_key, resolution, neighbors_key="connectivities"):
-    conn_matrix = adata.obsp[neighbors_key]
+def cpm(adata, partition_key, resolution, neighbors_key=None):
+    if neighbors_key is None:
+        conn_matrix = adata.obsp["connectivities"]
+    else:
+        neighbors_key = adata.uns[neighbors_key]["connectivities_key"]
+        conn_matrix = adata.obsp[neighbors_key]
     partition = adata.obs[partition_key]
     cluster_names = np.unique(partition)
 
@@ -43,8 +52,12 @@ def cpm(adata, partition_key, resolution, neighbors_key="connectivities"):
     return np.sum(cluster_mods)
 
 
-def mod_weighted(adata, partition_key, resolution, neighbors_key="connectivities"):
-    conn_matrix = adata.obsp[neighbors_key]
+def mod_weighted(adata, partition_key, resolution, neighbors_key=None):
+    if neighbors_key is None:
+        conn_matrix = adata.obsp["connectivities"]
+    else:
+        neighbors_key = adata.uns[neighbors_key]["connectivities_key"]
+        conn_matrix = adata.obsp[neighbors_key]
     partition = adata.obs[partition_key]
     cluster_names = np.unique(partition)
 
@@ -65,30 +78,33 @@ def mod_weighted(adata, partition_key, resolution, neighbors_key="connectivities
 
 
 def cluster_train_test(
-    data_train, data_test, resolutions, alg="leiden", random_state=None
+    data_train,
+    data_test,
+    resolutions,
+    alg="leiden",
+    neighbors_key=None,
+    random_state=None,
 ):
-
     for resolution in resolutions:
+        resolution_key_full = f"leiden_res{resolution}"
         if alg == "leiden":
             sc.tl.leiden(
                 data_train,
                 resolution=resolution,
-                key_added=f"leiden_res{resolution}",
+                key_added=resolution_key_full,
+                neighbors_key=neighbors_key,
                 random_state=random_state,
             )
-            data_test.obs[f"leiden_res{resolution}"] = data_train.obs[
-                f"leiden_res{resolution}"
-            ]
+            data_test.obs[resolution_key_full] = data_train.obs[resolution_key_full]
         elif alg == "louvain":
             sc.tl.louvain(
                 data_train,
                 resolution=resolution,
-                key_added=f"leiden_res{resolution}",
+                key_added=resolution_key_full,
+                neighbors_key=neighbors_key,
                 random_state=random_state,
             )
-            data_test.obs[f"leiden_res{resolution}"] = data_train.obs[
-                f"leiden_res{resolution}"
-            ]
+            data_test.obs[resolution_key_full] = data_train.obs[resolution_key_full]
 
 
 def find_optimal_clustering_resolution(
@@ -97,6 +113,7 @@ def find_optimal_clustering_resolution(
     resolutions,
     res_key="leiden_res",
     measure=modularity,
+    neighbors_key=None,
     random_seed=None,
 ):
 
@@ -104,13 +121,14 @@ def find_optimal_clustering_resolution(
     mod_scores = []
     for res in resolutions:
         res_key_full = f"{res_key}{res}"
-        data_test.obs[f"random_res{res}"] = data_test.obs[res_key_full]
-        rng.shuffle(data_test.obs[f"random_res{res}"])
+        random_res_key_full = f"random_res{res}"
+        data_test.obs[random_res_key_full] = data_test.obs[res_key_full]
+        rng.shuffle(data_test.obs[random_res_key_full])
 
         nclust = len(np.unique(data_train.obs[res_key_full]))
-        train_score = measure(data_train, res_key_full, res)
-        test_score = measure(data_test, res_key_full, res)
-        random_score = measure(data_test, f"random_res{res}", res)
+        train_score = measure(data_train, res_key_full, res, neighbors_key)
+        test_score = measure(data_test, res_key_full, res, neighbors_key)
+        random_score = measure(data_test, random_res_key_full, res, neighbors_key)
 
         mod_scores.append(
             {
