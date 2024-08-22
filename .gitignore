@@ -216,9 +216,13 @@ po/*~
 rsconnect/
 
 ### CUSTOM ###
+*.xlsx
 
 # mac specific
 .DS_Store
 
 # files too big for github
 *.h5ad
+
+# old logfiles
+application/poisson_hurdle/logfiles/*
