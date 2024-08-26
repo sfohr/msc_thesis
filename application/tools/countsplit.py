@@ -131,10 +131,13 @@ def select_3b_params_countsplit(
     potential_ks=[10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
     layer="counts",
     potential_betas=[0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+    maxiters=200,
 ):
 
-    X_train = ut.convert_to_dense_counts(train_data, layer=layer)
-    X_test = ut.convert_to_dense_counts(test_data, layer=layer)
+    X_train = ut.convert_to_dense(train_data, layer=layer)
+    X_train = X_train.astype(float)
+    X_test = ut.convert_to_dense(test_data, layer=layer)
+    X_test = X_test.astype(float)
 
     m, n = X_train.shape
 
@@ -163,7 +166,7 @@ def select_3b_params_countsplit(
                 kernel_strategy=kernel_strat,
                 initialization=init_strat,
                 kernel_params=kernel_parameters,
-                manual_max_iterations=100,
+                manual_max_iterations=maxiters,
                 verbose=True,
                 tolerance=None,
             )

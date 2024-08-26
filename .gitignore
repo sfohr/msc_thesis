@@ -226,3 +226,10 @@ rsconnect/
 
 # old logfiles
 application/poisson_hurdle/logfiles/*
+
+# data dirs
+application/data/S2/*
+application/data/S3/*
+
+# for the moment, old analysis notebooks
+application/analysis/P_aero_S2S3/*

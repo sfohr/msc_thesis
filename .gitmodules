@@ -1,0 +1,3 @@
+[submodule "application/tools/nomad"]
+	path = application/tools/nomad
+	url = https://github.com/flatironinstitute/nomad
