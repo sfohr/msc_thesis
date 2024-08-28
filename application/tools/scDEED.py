@@ -153,6 +153,7 @@ def embed_data_scDEED(
                 verbose = dim_red_params.get("verbose", True)
 
                 X = ut.convert_to_dense(adata)  # assumes data is in adata.X
+                X = X.astype(float)
                 n, p = X.shape
                 W0, H0 = cs.nuclear_norm_init(X, n, p, n_pcs)
 
