@@ -86,7 +86,10 @@ def cluster_train_test(
     random_state=None,
 ):
     for resolution in resolutions:
-        resolution_key_full = f"leiden_res{resolution}"
+        if neighbors_key:
+            resolution_key_full = f"{neighbors_key}_leiden_res{resolution}"
+        else:
+            resolution_key_full = f"leiden_res{resolution}"
         if alg == "leiden":
             sc.tl.leiden(
                 data_train,
