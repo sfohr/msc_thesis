@@ -1,0 +1,353 @@
+---
+format: html
+editor: visual
+---
+
+## Load libraries
+
+```{r}
+#| echo: false
+#| output: false
+library(ggplot2)
+library(dplyr)
+library(ggdark)
+library(latex2exp)
+library(cowplot)
+library(readr)
+library(tidyr)
+```
+
+## Read data
+
+```{r}
+base_path <- "../../data/S2/"
+data_path <- paste0(base_path, "gene_pair_df_4_viz_50genes_3BNMD_rank10_low-medium_high_mean_and_sparsity_whereXzero.csv")
+theta_path <- paste0(base_path, "Theta_3BNMD_r10.csv")
+
+expr_lvl_class_path <- "../../data/control_expression_classification.tsv"
+
+fig_path <- paste0(base_path, "figures/imputation_r10/")
+```
+
+Read whole reconstruction Theta
+
+```{r}
+theta <- read_csv(theta_path)
+head(theta)
+```
+
+Read expression level classification data.
+
+```{r}
+expr_lvl_df <- read_tsv(expr_lvl_class_path)[ , c("locus_tag", "expression_level")]
+head(expr_lvl_df)
+```
+
+We need theta in long format to join with the expression lvl class dataframe.
+
+```{r}
+theta_long <- gather(theta, key = "locus_tag", value = "Expression") |> 
+  left_join(expr_lvl_df, by = "locus_tag") |> 
+  mutate(
+    expression_level = factor(expression_level, 
+                              levels = c("not_expressed", "low", "medium_low", 
+                                         "medium_high", "high"), 
+                              labels = c("not expressed", "low", "medium low", 
+                                         "medium high", "high"))
+  ) |> 
+  drop_na() # we're missing expression lvl classification for a few genes
+head(theta_long)
+```
+
+Read paired genes.
+
+```{r}
+expr_lvl_classes <- c("low", "medium_high")
+```
+
+Low-medium high matched pairs.
+
+```{r}
+d <- read.csv(data_path) |> 
+  # expression lvl class missing for a few genes
+  filter(!is.na(Expression))
+head(d)
+```
+
+Sanity check:
+
+```{r}
+all(d$expression_lvl_class %in% expr_lvl_classes)
+```
+
+Only keep gene pairs whose genes display at least three negative expression values.
+
+```{r}
+d_n_neg <- d |> 
+  group_by(gene_pair_id, Gene) |> 
+  summarise(
+    n_negative = sum(Expression < 0.0)) |> 
+  ungroup() |> 
+  group_by(gene_pair_id) |> 
+  summarise(has_n_smaller_3 = any(n_negative < 3)) |> 
+  ungroup()
+head(d_n_neg, 3)
+```
+
+```{r}
+table(d_n_neg$has_n_smaller_3)
+```
+
+## Aggregate data
+
+```{r}
+d_agg <- d |> 
+  left_join(d_n_neg, by="gene_pair_id") |> 
+  group_by(gene_pair_id, Gene) |> 
+  filter(!has_n_smaller_3) |> 
+  summarise(
+    #median_expression = median(Expression),
+    #mean_expression = mean(Expression),
+    mean_negative_expression = mean(Expression[Expression < 0.0]),
+    mean_negative_expression = tidyr::replace_na(mean_negative_expression, 0.0),
+    median_negative_expression = median(Expression[Expression < 0.0]),
+    median_negative_expression = tidyr::replace_na(median_negative_expression, 0.0),
+    n_negative = sum(Expression < 0.0),
+    n = n(),
+    share_negative = n_negative / n,
+    min_val = min(Expression),
+    dist = unique(dist),
+    gene_pair_id = unique(gene_pair_id),
+    expression_lvl_class = unique(expression_lvl_class)
+  )
+head(d_agg)
+```
+
+```{r}
+pair_diffs <- d_agg |> 
+  group_by(gene_pair_id) |> 
+  arrange(desc(expression_lvl_class)) |> 
+  tidyr::pivot_wider(
+    id_cols = gene_pair_id, 
+    names_from = "expression_lvl_class", 
+    values_from = c("mean_negative_expression", 
+                    "median_negative_expression")) |> 
+  mutate(
+    
+    # median
+    median_negative_expression_low = tidyr::replace_na(
+      median_negative_expression_low, 0.0
+      ),
+    median_negative_expression_medium_high = tidyr::replace_na(
+      median_negative_expression_medium_high, 0.0
+      ),
+    median_neg_diff = 
+      median_negative_expression_low - median_negative_expression_medium_high,
+    
+    # mean
+    mean_negative_expression_low = tidyr::replace_na(mean_negative_expression_low, 0.0),
+    mean_negative_expression_medium_high = tidyr::replace_na(
+      mean_negative_expression_medium_high, 0.0
+      ),
+    mean_neg_diff = mean_negative_expression_low - mean_negative_expression_medium_high
+  )
+head(pair_diffs)
+```
+
+## Plots
+
+### Histogram of negative Theta values across expression level classes
+
+Sample a fraction of values.
+
+```{r}
+set.seed(687418221)
+sample_frac <- 1.0 # all observations
+sample_idx <- sample.int(
+  nrow(theta_long), 
+  size = as.integer(sample_frac * nrow(theta_long)), replace = FALSE
+  )
+```
+
+Plot histogram regular.
+
+```{r}
+expr_lvl_hist <- theta_long[sample_idx, ] |> 
+  select(expression_level, Expression) |> 
+  ggplot(aes(x = Expression, group = expression_level)) +
+  geom_histogram(aes(fill = expression_level), binwidth = 0.1) +
+  geom_vline(xintercept = 0, color = "white") +
+  coord_cartesian(ylim = c(0, 25)) +
+  facet_grid(expression_level ~ .) +
+  scale_fill_brewer(palette = "Dark2") +
+  labs(x = TeX("$\\Theta_{3B-NMD}$"), y = "Counts") +
+  guides(fill = "none") +
+  theme(strip.text.y = element_blank())
+expr_lvl_hist
+```
+
+Plot histograms with zoomed x-axis.
+
+```{r}
+expr_lvl_hist_zoomed <- theta_long[sample_idx, ] |> 
+  select(expression_level, Expression) |> 
+  ggplot(aes(x = Expression, group = expression_level)) +
+  geom_histogram(aes(fill = expression_level), binwidth = 0.1) +
+  geom_vline(xintercept = 0, color = "white") +
+  coord_cartesian(ylim = c(0, 25), xlim = c(-40, 40)) +
+  facet_grid(expression_level ~ .) +
+  scale_fill_brewer(palette = "Dark2") +
+  labs(x = TeX("$\\Theta_{3B-NMD}$"), y = "", fill = "Expression level\nclass") +
+  theme(
+    axis.text.y = element_blank(), 
+    axis.ticks = element_blank()
+    )
+expr_lvl_hist_zoomed
+```
+
+Combine both plots for export
+
+```{r}
+expr_lvl_hist_plots <- plot_grid(
+  expr_lvl_hist + theme(legend.position="none"), 
+  expr_lvl_hist_zoomed + theme(legend.position="none"), 
+  labels = "AUTO")
+
+legend <- get_legend(
+  # create some space to the left of the legend
+  expr_lvl_hist_zoomed + theme(legend.box.margin = margin(0, 0, 0, 2))
+)
+
+histplot_ready <- plot_grid(expr_lvl_hist_plots, legend, rel_widths = c(2, .4))
+histplot_ready
+```
+
+Save to file
+
+```{r}
+ggsave2(
+  paste0(fig_path, "nmd_reconstruction_imputation_hist_3BNMD_r10_counts.pdf"), 
+  plot = histplot_ready, width = 12, height = 6
+)
+```
+
+### Connected dots
+
+```{r}
+x_lim_negative <- min(d_agg$mean_negative_expression) - 0.02
+connect_dotplot_mean <- d_agg |>
+  ungroup() |>
+  left_join(pair_diffs, by="gene_pair_id") |>
+  mutate(y_order = dense_rank(desc(mean_neg_diff))) |>
+  arrange(desc(dist)) |>
+  ggplot(aes(x = mean_negative_expression, 
+             y = y_order, 
+             group = gene_pair_id,
+             color = expression_lvl_class)) +
+  geom_line() + 
+  geom_point() + 
+  ylab("") +
+  xlab(TeX(r"(mean$( \Theta^{(-)})$)")) +
+  labs(color = "Expression\nLevel Class") +
+  xlim(c(x_lim_negative, 0))
+connect_dotplot_mean
+```
+
+```{r}
+connect_dotplot_median <- d_agg |>
+  ungroup() |>
+  left_join(pair_diffs, by="gene_pair_id") |>
+  mutate(y_order = dense_rank(desc(mean_neg_diff))) |>
+  arrange(desc(dist)) |>
+  ggplot(aes(x=median_negative_expression, 
+             y = y_order, 
+             group = gene_pair_id,
+             color=expression_lvl_class)) +
+  geom_line() + 
+  geom_point() + 
+  ylab(TeX(r"(rank$\left( \bar{\Theta}^{(-)}_{low} - \bar{\Theta}^{(-)}_{high}\right)$)")) +
+  xlab(TeX(r"(median$( \Theta^{(-)})$)")) +
+  xlim(c(x_lim_negative, 0))
+connect_dotplot_median
+```
+
+Combine the plots
+
+```{r}
+connected_dot_plots <- plot_grid(
+  connect_dotplot_median + theme(legend.position="none"), 
+  connect_dotplot_mean + theme(legend.position="none"), 
+labels = "AUTO")
+
+legend <- get_legend(
+  # create some space to the left of the legend
+  connect_dotplot_mean + theme(legend.box.margin = margin(0, 0, 0, 1))
+)
+
+connected_dots_plot_ready <- plot_grid(connected_dot_plots, legend, rel_widths = c(2, 0.3))
+connected_dots_plot_ready
+```
+
+Save the combined plot:
+
+```{r}
+#| echo: false
+#| output: false
+ggsave2(
+  paste0(fig_path, "low_med-high_3BNMD_r10_connected_dots_multiplot_diffs.pdf"), 
+  plot = connected_dots_plot_ready, width = 10, height = 5)
+
+```
+
+### Plot the whole paired data
+
+Prepare data
+
+```{r}
+d_plt_lines <- d |> 
+  filter(dist == 0.0, Expression < 0.0) |> 
+  left_join(pair_diffs, by="gene_pair_id") |> 
+  mutate(
+    y_order = dense_rank(desc(mean_neg_diff)),
+    y_order = case_when(
+      expression_lvl_class == "low" ~ y_order + 0.15,
+      expression_lvl_class == "medium_high" ~ y_order - 0.15)
+    )
+
+```
+
+Do the plot
+
+```{r}
+plt <- d_plt_lines |> 
+  ggplot(aes(x = Expression, y = y_order, color = expression_lvl_class)) +
+  geom_point(shape="|", alpha = 0.6) +
+  theme(panel.background = element_rect(fill="black"), 
+        panel.grid = element_blank(), 
+        panel.grid.major.x = element_line(color="darkgrey", linewidth = 0.05),
+        panel.grid.minor.x = element_line(color="darkgrey", linewidth = 0.05))
+```
+
+Add labels
+
+```{r}
+plt_with_lbls <- plt +  labs(
+  #title = TeX("Distribution of NMD reconstruction $\\Theta$ on paired genes"), 
+  #subtitle = "3B-NMD on raw count expression matrix, Pseudomonas S3 (regular iron env), 500 iters, latent rank 10. \nGene pairs matched by mean and sparsity (exact match).", 
+  x = TeX(r'($\Theta_{3B-NMD}$)'), 
+  y = TeX(r"(rank$\left( \bar{\Theta}^{(-)}_{low} - \bar{\Theta}^{(-)}_{high}\right)$)"), 
+  color = "Expression level class") +
+  guides(color = guide_legend( 
+    override.aes=list(shape = 15))) +
+  geom_vline(xintercept = 0, color="black") +
+  xlim(c(-15, 5))
+```
+
+Save plot to png
+
+```{r}
+cowplot::ggsave2(
+  plot=plt_with_lbls, 
+  filename = paste0(fig_path, "low_med-high_3BNMD_r10_all_data.png"),
+  dpi = 300, width = 6, height = 8)
+```
