@@ -231,5 +231,13 @@ application/poisson_hurdle/logfiles/*
 application/data/S2/*
 application/data/S3/*
 
+*.numbers
+
 # for the moment, old analysis notebooks
 application/analysis/P_aero_S2S3/*
+
+.Rhistory
+
+# quarto render dirs
+application/analysis/NMD_zero_imputation/S3_NMD_imputation_vizualization_r10_files
+application/analysis/NMD_zero_imputation/S2_NMD_imputation_vizualization_r10_files
