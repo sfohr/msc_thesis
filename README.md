@@ -1,6 +1,6 @@
 # Nonlinear methods for dimensionality reduction and clustering of bacterial single-cell  sequencing data
 
-Repo containing analyses for my master's thesis in biostatistics at LMU Munich. 
+Repo containing code for my master's thesis in biostatistics at LMU Munich. 
 I took a look on how to use Nonlinear Matrix Decomposition (NMD) (Saul, L., 2022) in the context of bacterial scRNA-seq analysis (Heumos, L., et. al. 2023), replacing Principal Component Analysis in the optimized workflow, as outlined in Ostner, J. (2024).
 
 My thesis was structured along the following objectives:
@@ -11,6 +11,7 @@ My thesis was structured along the following objectives:
 - explore NMD's potential for imputation of [sampling zeros](https://www.nature.com/articles/s41467-021-27729-z) (check `/application/NMD_zero_imputation /`)
 - potential of Poisson-Hurdle model-based clustering (Qiao, Z., et. al. (2023)) for scRNA-seq (`/application/poisson_hurdle`).
 
+Raw and intermediate data, as well as figures, can be downloaded from [zenodo](https://zenodo.org/records/13898901).
 
 ## References
 Saul, L., K., (2022), "A Nonlinear Matrix Decomposition for Mining the Zeros of Sparse Data"
